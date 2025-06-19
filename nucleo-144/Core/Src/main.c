@@ -40,8 +40,6 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-I2C_HandleTypeDef hi2c1;
-
 RTC_HandleTypeDef hrtc;
 
 UART_HandleTypeDef huart3;
@@ -55,82 +53,58 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART3_UART_Init(void);
 static void MX_RTC_Init(void);
-static void MX_I2C1_Init(void);
 /* USER CODE BEGIN PFP */
-#define LCD_ADDR (0x27 << 1)  // PCF8574 I2C 주소 (보드마다 다를 수 있음)
-char uart_buf[30];
 
-static I2C_HandleTypeDef *_lcd_i2c;
-
-static void lcd_send_cmd(uint8_t cmd);
-static void lcd_send_data(uint8_t data);
-static void lcd_send_byte(uint8_t data, uint8_t mode);
-static void lcd_write_nibble(uint8_t nibble, uint8_t mode);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-void lcd_init(I2C_HandleTypeDef *hi2c) {
-    _lcd_i2c = hi2c;
-    HAL_Delay(50); // LCD power-on delay
-    lcd_send_cmd(0x33);
-    lcd_send_cmd(0x32);
-    lcd_send_cmd(0x28); // 4-bit mode, 2 lines, 5x8 dots
-    lcd_send_cmd(0x0C); // display on, cursor off
-    lcd_send_cmd(0x06); // entry mode
-    lcd_send_cmd(0x01); // clear
-    HAL_Delay(2);
-}
+#define UART_BUF_LEN 30
+#define START_ADDR (0x08100000)
 
-void lcd_send_string(char *str) {
-    while (*str) {
-        lcd_send_data(*str++);
-    }
-}
+char uart_buf[UART_BUF_LEN];
+uint32_t * flash_addr,i,error_page,prog_addr;
 
-void lcd_clear(void) {
-    lcd_send_cmd(0x01);
-    HAL_Delay(2);
-}
+#define ADDR_FLASH_SECTOR_0     ((uint32_t)0x08000000) /* Base @ of Sector 0, 16 Kbytes */
+#define ADDR_FLASH_SECTOR_1     ((uint32_t)0x08004000) /* Base @ of Sector 1, 16 Kbytes */
+#define ADDR_FLASH_SECTOR_2     ((uint32_t)0x08008000) /* Base @ of Sector 2, 16 Kbytes */
+#define ADDR_FLASH_SECTOR_3     ((uint32_t)0x0800C000) /* Base @ of Sector 3, 16 Kbytes */
+#define ADDR_FLASH_SECTOR_4     ((uint32_t)0x08010000) /* Base @ of Sector 4, 64 Kbytes */
+#define ADDR_FLASH_SECTOR_5     ((uint32_t)0x08020000) /* Base @ of Sector 5, 128 Kbytes */
+#define ADDR_FLASH_SECTOR_6     ((uint32_t)0x08040000) /* Base @ of Sector 6, 128 Kbytes */
+#define ADDR_FLASH_SECTOR_7     ((uint32_t)0x08060000) /* Base @ of Sector 7, 128 Kbytes */
+#define ADDR_FLASH_SECTOR_8     ((uint32_t)0x08080000) /* Base @ of Sector 8, 128 Kbytes */
+#define ADDR_FLASH_SECTOR_9     ((uint32_t)0x080A0000) /* Base @ of Sector 9, 128 Kbytes */
+#define ADDR_FLASH_SECTOR_10    ((uint32_t)0x080C0000) /* Base @ of Sector 10, 128 Kbytes */
+#define ADDR_FLASH_SECTOR_11    ((uint32_t)0x080E0000) /* Base @ of Sector 11, 128 Kbytes */
 
-void lcd_set_cursor(uint8_t row, uint8_t col) {
-    uint8_t addr[] = {0x80, 0xC0}; // 2 line LCD
-    lcd_send_cmd(addr[row] + col);
-}
+/* Base address of the Flash sectors Bank 2 */
+#define ADDR_FLASH_SECTOR_12     ((uint32_t)0x08100000) /* Base @ of Sector 0, 16 Kbytes */
+#define ADDR_FLASH_SECTOR_13     ((uint32_t)0x08104000) /* Base @ of Sector 1, 16 Kbytes */
+#define ADDR_FLASH_SECTOR_14     ((uint32_t)0x08108000) /* Base @ of Sector 2, 16 Kbytes */
+#define ADDR_FLASH_SECTOR_15     ((uint32_t)0x0810C000) /* Base @ of Sector 3, 16 Kbytes */
+#define ADDR_FLASH_SECTOR_16     ((uint32_t)0x08110000) /* Base @ of Sector 4, 64 Kbytes */
+#define ADDR_FLASH_SECTOR_17     ((uint32_t)0x08120000) /* Base @ of Sector 5, 128 Kbytes */
+#define ADDR_FLASH_SECTOR_18     ((uint32_t)0x08140000) /* Base @ of Sector 6, 128 Kbytes */
+#define ADDR_FLASH_SECTOR_19     ((uint32_t)0x08160000) /* Base @ of Sector 7, 128 Kbytes */
+#define ADDR_FLASH_SECTOR_20     ((uint32_t)0x08180000) /* Base @ of Sector 8, 128 Kbytes  */
+#define ADDR_FLASH_SECTOR_21     ((uint32_t)0x081A0000) /* Base @ of Sector 9, 128 Kbytes  */
+#define ADDR_FLASH_SECTOR_22     ((uint32_t)0x081C0000) /* Base @ of Sector 10, 128 Kbytes */
+#define ADDR_FLASH_SECTOR_23     ((uint32_t)0x081E0000) /* Base @ of Sector 11, 128 Kbytes */
 
-static void lcd_send_cmd(uint8_t cmd) {
-    lcd_send_byte(cmd, 0);
-}
+#define FLASH_USER_START_ADDR   ADDR_FLASH_SECTOR_3   /* Start @ of user Flash area */
+#define FLASH_USER_END_ADDR     ADDR_FLASH_SECTOR_23  +  GetSectorSize(ADDR_FLASH_SECTOR_23) -1 /* End @ of user Flash area : sector start address + sector size -1 */
 
-static void lcd_send_data(uint8_t data) {
-    lcd_send_byte(data, 1);
-}
+#define DATA_32                 ((uint32_t)0x12345678)
 
-static void lcd_send_byte(uint8_t data, uint8_t mode) {
-    lcd_write_nibble(data & 0xF0, mode);
-    lcd_write_nibble((data << 4) & 0xF0, mode);
-}
+uint32_t FirstSector = 0, NbOfSectors = 0;
+uint32_t Address = 0, SECTORError = 0;
+__IO uint32_t data32 = 0 , MemoryProgramStatus = 0;
 
-static void lcd_write_nibble(uint8_t nibble, uint8_t mode) {
-    uint8_t data_u = nibble | (mode ? 0x01 : 0x00) | 0x08; // Backlight on
-    uint8_t data_l = data_u | 0x04; // Enable bit
-    uint8_t data_t[] = {data_l, data_u};
-    HAL_I2C_Master_Transmit(_lcd_i2c, LCD_ADDR, data_t, 2, HAL_MAX_DELAY);
-    HAL_Delay(1);
-}
-void I2C_Scan_Bus(I2C_HandleTypeDef *hi2c) {
-    memset(uart_buf,0,30);
-    sprintf(uart_buf,"Scanning I2C bus...\r\n");
-    HAL_UART_Transmit_IT(&huart3,uart_buf,sizeof(uart_buf));
+static FLASH_EraseInitTypeDef EraseInitStruct;
 
-    for (uint8_t addr = 1; addr < 128; addr++) {
-        if (HAL_I2C_IsDeviceReady(hi2c, addr << 1, 1, 10) == HAL_OK) {
-            memset(uart_buf,0,30);
-            sprintf(uart_buf,"Found device at 0x%02X\r\n", addr);
-            HAL_UART_Transmit_IT(&huart3,uart_buf,sizeof(uart_buf));
-        }
-    }
-}
+static uint32_t GetSector(uint32_t Address);
+static uint32_t GetSectorSize(uint32_t Sector);
 /* USER CODE END 0 */
 
 /**
@@ -164,15 +138,108 @@ int main(void)
   MX_GPIO_Init();
   MX_USART3_UART_Init();
   MX_RTC_Init();
-  MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
-  I2C_Scan_Bus(&hi2c1);   // 스캔 먼저 수행
+#if 1
+  memset(uart_buf,0,UART_BUF_LEN);
+  sprintf(uart_buf,"page 0\r\n");
+  HAL_UART_Transmit_IT(&huart3,uart_buf,sizeof(uart_buf));
+  HAL_Delay(10);
 
-  lcd_init(&hi2c1);
-  lcd_set_cursor(0, 0);
-  lcd_send_string("Hello, STM32!");
-  lcd_set_cursor(1, 0);
-  lcd_send_string("I2C LCD Ready");
+  flash_addr = (uint32_t *)0x08000000;
+
+  for(i=0;i<10;i++)
+  {
+    memset(uart_buf,0,UART_BUF_LEN);
+    sprintf(uart_buf,"%08x => %08x\r\n", flash_addr, *(flash_addr));
+    HAL_UART_Transmit_IT(&huart3,uart_buf,sizeof(uart_buf));
+    HAL_Delay(10);
+    flash_addr++;
+  }
+
+  memset(uart_buf,0,UART_BUF_LEN);
+  sprintf(uart_buf,"\nbank2\r\n");
+  HAL_UART_Transmit_IT(&huart3,uart_buf,sizeof(uart_buf));
+  HAL_Delay(10);
+
+  flash_addr = (uint32_t *)0x08100000;
+
+  for(i=0;i<10;i++)
+  {
+    memset(uart_buf,0,UART_BUF_LEN);
+    sprintf(uart_buf,"%08x => %08x\r\n", flash_addr, *(flash_addr));
+    HAL_UART_Transmit_IT(&huart3,uart_buf,sizeof(uart_buf));
+    HAL_Delay(10);
+    flash_addr++;
+  }
+#endif
+#if 0
+  HAL_FLASH_Unlock();
+
+  /* Get the 1st sector to erase */
+  FirstSector = GetSector(FLASH_USER_START_ADDR);
+  /* Get the number of sector to erase from 1st sector*/
+  NbOfSectors = GetSector(FLASH_USER_END_ADDR) - FirstSector + 1;
+  /* Fill EraseInit structure*/
+  EraseInitStruct.TypeErase     = FLASH_TYPEERASE_SECTORS;
+  EraseInitStruct.VoltageRange  = FLASH_VOLTAGE_RANGE_3;
+  EraseInitStruct.Sector        = FirstSector;
+  EraseInitStruct.NbSectors     = NbOfSectors;
+
+  if(HAL_FLASHEx_Erase(&EraseInitStruct, &SECTORError) != HAL_OK)
+  {
+	memset(uart_buf,0,UART_BUF_LEN);
+	sprintf(uart_buf,"HAL_FLASHEx_Erase ERROR\r\n");
+	HAL_UART_Transmit_IT(&huart3,uart_buf,sizeof(uart_buf));
+	return -1;
+  }
+
+
+  Address = FLASH_USER_START_ADDR;
+
+  while(Address < FLASH_USER_END_ADDR)
+  {
+    if(HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, Address, DATA_32) == HAL_OK)
+    {
+      Address = Address + 4;
+    }
+   else
+    {
+		memset(uart_buf,0,UART_BUF_LEN);
+		sprintf(uart_buf,"HAL_FLASH_Program ERROR\r\n");
+		HAL_UART_Transmit_IT(&huart3,uart_buf,sizeof(uart_buf));
+		return -1;
+    }
+  }
+
+  HAL_FLASH_Lock();
+
+  Address = FLASH_USER_START_ADDR;
+  MemoryProgramStatus = 0x0;
+
+  while(Address < FLASH_USER_END_ADDR)
+  {
+    data32 = *(__IO uint32_t *)Address;
+
+    if (data32 != DATA_32)
+    {
+      MemoryProgramStatus++;
+    }
+    Address = Address + 4;
+  }
+
+  if(MemoryProgramStatus == 0)
+  {
+		memset(uart_buf,0,UART_BUF_LEN);
+		sprintf(uart_buf,"No error detected\r\n");
+		HAL_UART_Transmit_IT(&huart3,uart_buf,sizeof(uart_buf));
+  }
+  else
+  {
+		memset(uart_buf,0,UART_BUF_LEN);
+		sprintf(uart_buf,"Error detected\r\n");
+		HAL_UART_Transmit_IT(&huart3,uart_buf,sizeof(uart_buf));
+  }
+#endif
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -240,54 +307,61 @@ void SystemClock_Config(void)
   }
 }
 
-/**
-  * @brief I2C1 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_I2C1_Init(void)
+static uint32_t GetSector(uint32_t Address)
 {
+  uint32_t sector = 0;
 
-  /* USER CODE BEGIN I2C1_Init 0 */
-
-  /* USER CODE END I2C1_Init 0 */
-
-  /* USER CODE BEGIN I2C1_Init 1 */
-
-  /* USER CODE END I2C1_Init 1 */
-  hi2c1.Instance = I2C1;
-  hi2c1.Init.ClockSpeed = 100000;
-  hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
-  hi2c1.Init.OwnAddress1 = 0;
-  hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
-  hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
-  hi2c1.Init.OwnAddress2 = 0;
-  hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
-  hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
-  if (HAL_I2C_Init(&hi2c1) != HAL_OK)
+  if((Address < ADDR_FLASH_SECTOR_1) && (Address >= ADDR_FLASH_SECTOR_0))
   {
-    Error_Handler();
+    sector = FLASH_SECTOR_0;
   }
-
-  /** Configure Analogue filter
-  */
-  if (HAL_I2CEx_ConfigAnalogFilter(&hi2c1, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
+  else if((Address < ADDR_FLASH_SECTOR_2) && (Address >= ADDR_FLASH_SECTOR_1))
   {
-    Error_Handler();
+    sector = FLASH_SECTOR_1;
   }
-
-  /** Configure Digital filter
-  */
-  if (HAL_I2CEx_ConfigDigitalFilter(&hi2c1, 0) != HAL_OK)
+  else if((Address < ADDR_FLASH_SECTOR_3) && (Address >= ADDR_FLASH_SECTOR_2))
   {
-    Error_Handler();
+    sector = FLASH_SECTOR_2;
   }
-  /* USER CODE BEGIN I2C1_Init 2 */
-
-  /* USER CODE END I2C1_Init 2 */
-
+  else if((Address < ADDR_FLASH_SECTOR_4) && (Address >= ADDR_FLASH_SECTOR_3))
+  {
+    sector = FLASH_SECTOR_3;
+  }
+  else if((Address < ADDR_FLASH_SECTOR_5) && (Address >= ADDR_FLASH_SECTOR_4))
+  {
+    sector = FLASH_SECTOR_4;
+  }
+  else if((Address < ADDR_FLASH_SECTOR_6) && (Address >= ADDR_FLASH_SECTOR_5))
+  {
+    sector = FLASH_SECTOR_5;
+  }
+  else if((Address < ADDR_FLASH_SECTOR_7) && (Address >= ADDR_FLASH_SECTOR_6))
+  {
+    sector = FLASH_SECTOR_6;
+  }
+  else /* (Address < FLASH_END_ADDR) && (Address >= ADDR_FLASH_SECTOR_7) */
+  {
+    sector = FLASH_SECTOR_7;
+  }
+  return sector;
 }
-
+static uint32_t GetSectorSize(uint32_t Sector)
+{
+  uint32_t sectorsize = 0x00;
+  if((Sector == FLASH_SECTOR_0) || (Sector == FLASH_SECTOR_1) || (Sector == FLASH_SECTOR_2) || (Sector == FLASH_SECTOR_3))
+  {
+    sectorsize = 16 * 1024;
+  }
+  else if(Sector == FLASH_SECTOR_4)
+  {
+    sectorsize = 64 * 1024;
+  }
+  else
+  {
+    sectorsize = 128 * 1024;
+  }
+  return sectorsize;
+}
 /**
   * @brief RTC Initialization Function
   * @param None
@@ -453,6 +527,14 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
   GPIO_InitStruct.Alternate = GPIO_AF11_ETH;
   HAL_GPIO_Init(GPIOG, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PB8 */
+  GPIO_InitStruct.Pin = GPIO_PIN_8;
+  GPIO_InitStruct.Mode = GPIO_MODE_AF_OD;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+  GPIO_InitStruct.Alternate = GPIO_AF4_I2C1;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
