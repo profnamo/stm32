@@ -74,7 +74,7 @@ int main(void)
 
   /* USER CODE BEGIN 1 */
   char uart_buf[30];
-  int ounter=0;
+  int counter=0;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -109,7 +109,7 @@ int main(void)
   {
     /* USER CODE END WHILE */
     memset(uart_buf,0,30);
-    sprintf(uart_buf,"%d,%d\r\n",counter);
+    sprintf(uart_buf,"%d\r\n",counter);
     HAL_UART_Transmit_IT(&huart3,uart_buf,sizeof(uart_buf));
     counter++;
     HAL_Delay(1000);
