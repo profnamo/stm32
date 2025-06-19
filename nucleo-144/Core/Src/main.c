@@ -57,12 +57,80 @@ static void MX_USART3_UART_Init(void);
 static void MX_RTC_Init(void);
 static void MX_I2C1_Init(void);
 /* USER CODE BEGIN PFP */
+#define LCD_ADDR (0x27 << 1)  // PCF8574 I2C 주소 (보드마다 다를 수 있음)
+char uart_buf[30];
 
+static I2C_HandleTypeDef *_lcd_i2c;
+
+static void lcd_send_cmd(uint8_t cmd);
+static void lcd_send_data(uint8_t data);
+static void lcd_send_byte(uint8_t data, uint8_t mode);
+static void lcd_write_nibble(uint8_t nibble, uint8_t mode);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+void lcd_init(I2C_HandleTypeDef *hi2c) {
+    _lcd_i2c = hi2c;
+    HAL_Delay(50); // LCD power-on delay
+    lcd_send_cmd(0x33);
+    lcd_send_cmd(0x32);
+    lcd_send_cmd(0x28); // 4-bit mode, 2 lines, 5x8 dots
+    lcd_send_cmd(0x0C); // display on, cursor off
+    lcd_send_cmd(0x06); // entry mode
+    lcd_send_cmd(0x01); // clear
+    HAL_Delay(2);
+}
 
+void lcd_send_string(char *str) {
+    while (*str) {
+        lcd_send_data(*str++);
+    }
+}
+
+void lcd_clear(void) {
+    lcd_send_cmd(0x01);
+    HAL_Delay(2);
+}
+
+void lcd_set_cursor(uint8_t row, uint8_t col) {
+    uint8_t addr[] = {0x80, 0xC0}; // 2 line LCD
+    lcd_send_cmd(addr[row] + col);
+}
+
+static void lcd_send_cmd(uint8_t cmd) {
+    lcd_send_byte(cmd, 0);
+}
+
+static void lcd_send_data(uint8_t data) {
+    lcd_send_byte(data, 1);
+}
+
+static void lcd_send_byte(uint8_t data, uint8_t mode) {
+    lcd_write_nibble(data & 0xF0, mode);
+    lcd_write_nibble((data << 4) & 0xF0, mode);
+}
+
+static void lcd_write_nibble(uint8_t nibble, uint8_t mode) {
+    uint8_t data_u = nibble | (mode ? 0x01 : 0x00) | 0x08; // Backlight on
+    uint8_t data_l = data_u | 0x04; // Enable bit
+    uint8_t data_t[] = {data_l, data_u};
+    HAL_I2C_Master_Transmit(_lcd_i2c, LCD_ADDR, data_t, 2, HAL_MAX_DELAY);
+    HAL_Delay(1);
+}
+void I2C_Scan_Bus(I2C_HandleTypeDef *hi2c) {
+    memset(uart_buf,0,30);
+    sprintf(uart_buf,"Scanning I2C bus...\r\n");
+    HAL_UART_Transmit_IT(&huart3,uart_buf,sizeof(uart_buf));
+
+    for (uint8_t addr = 1; addr < 128; addr++) {
+        if (HAL_I2C_IsDeviceReady(hi2c, addr << 1, 1, 10) == HAL_OK) {
+            memset(uart_buf,0,30);
+            sprintf(uart_buf,"Found device at 0x%02X\r\n", addr);
+            HAL_UART_Transmit_IT(&huart3,uart_buf,sizeof(uart_buf));
+        }
+    }
+}
 /* USER CODE END 0 */
 
 /**
@@ -98,7 +166,13 @@ int main(void)
   MX_RTC_Init();
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
+  I2C_Scan_Bus(&hi2c1);   // 스캔 먼저 수행
 
+  lcd_init(&hi2c1);
+  lcd_set_cursor(0, 0);
+  lcd_send_string("Hello, STM32!");
+  lcd_set_cursor(1, 0);
+  lcd_send_string("I2C LCD Ready");
   /* USER CODE END 2 */
 
   /* Infinite loop */
