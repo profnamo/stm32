@@ -62,23 +62,6 @@ static void MX_TIM2_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-char uart_buf[30];
-volatile int second_counter, timer_counter;
-
-HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-{
-  if(htim->Instance==TIM2)
-  {
-    if((timer_counter%100)==0)
-    {
-      memset(uart_buf,0,30);
-      sprintf(uart_buf,"%d,%d\r\n",second_counter,timer_counter);
-      HAL_UART_Transmit_IT(&huart3,uart_buf,sizeof(uart_buf));
-      second_counter++;
-    }
-    timer_counter++;
-  }
-}
 
 /* USER CODE END 0 */
 
@@ -90,7 +73,8 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
+  char uart_buf[30];
+  int ounter=0;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -124,7 +108,11 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-
+    memset(uart_buf,0,30);
+    sprintf(uart_buf,"%d,%d\r\n",counter);
+    HAL_UART_Transmit_IT(&huart3,uart_buf,sizeof(uart_buf));
+    counter++;
+    HAL_Delay(1000);
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
