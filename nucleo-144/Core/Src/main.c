@@ -65,7 +65,20 @@ static void MX_ADC1_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+uint32_t adc_value;
+uint8_t uart_buf[30];
 
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
+{
+  if(hadc->Instance==ADC1)
+  {
+    memset(uart_buf,0,sizeof(uart_buf));
+    adc_value = HAL_ADC_GetValue(&hadc1);
+    sprintf(uart_buf,"-------> %d\r\n",adc_value);
+    HAL_UART_Transmit(&huart3,uart_buf,sizeof(uart_buf),10000);
+    HAL_ADC_Start_IT(&hadc1);
+  }
+}
 /* USER CODE END 0 */
 
 /**
@@ -103,7 +116,7 @@ int main(void)
   MX_TIM2_Init();
   MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
-
+  HAL_ADC_Start_IT(&hadc1);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -111,15 +124,7 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-    HAL_ADC_Start(&hadc1);
-	HAL_ADC_PollForConversion(&hadc1,10);
-    adc_value = HAL_ADC_GetValue(&hadc1);
-    HAL_ADC_Stop(&hadc1);
 
-    memset(uart_buf,0,sizeof(uart_buf));
-    sprintf(uart_buf,"-->%d\r\n",adc_value);
-    HAL_UART_Transmit_IT(&huart3,uart_buf,sizeof(uart_buf));
-    HAL_Delay(100);
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
