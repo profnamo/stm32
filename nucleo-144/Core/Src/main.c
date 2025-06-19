@@ -59,6 +59,21 @@ static void MX_RTC_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+char uart_buf[30];
+volatile int second_counter, timer_counter;
+
+//systick interrrupt는 1ms마다 발생
+HAL_SYSTICK_Callback()
+{
+  if((timer_counter%1000)==0)
+  {
+    memset(uart_buf,0,30);
+    sprintf(uart_buf,"%d,%d\r\n",second_counter,timer_counter);
+    HAL_UART_Transmit_IT(&huart3,uart_buf,sizeof(uart_buf));
+    second_counter++;
+  }
+  timer_counter++;
+}
 
 /* USER CODE END 0 */
 
