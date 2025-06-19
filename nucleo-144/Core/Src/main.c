@@ -139,7 +139,7 @@ int main(void)
   MX_USART3_UART_Init();
   MX_RTC_Init();
   /* USER CODE BEGIN 2 */
-#if 1
+#if 0
   memset(uart_buf,0,UART_BUF_LEN);
   sprintf(uart_buf,"page 0\r\n");
   HAL_UART_Transmit_IT(&huart3,uart_buf,sizeof(uart_buf));
@@ -172,7 +172,7 @@ int main(void)
     flash_addr++;
   }
 #endif
-#if 0
+#if 1
   HAL_FLASH_Unlock();
 
   /* Get the 1st sector to erase */
