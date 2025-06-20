@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "usb_device.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -59,52 +60,9 @@ static void MX_RTC_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-#define UART_BUF_LEN 30
-#define START_ADDR (0x08100000)
-
-char uart_buf[UART_BUF_LEN];
-uint32_t * flash_addr,i,error_page,prog_addr;
-
-#define ADDR_FLASH_SECTOR_0     ((uint32_t)0x08000000) /* Base @ of Sector 0, 16 Kbytes */
-#define ADDR_FLASH_SECTOR_1     ((uint32_t)0x08004000) /* Base @ of Sector 1, 16 Kbytes */
-#define ADDR_FLASH_SECTOR_2     ((uint32_t)0x08008000) /* Base @ of Sector 2, 16 Kbytes */
-#define ADDR_FLASH_SECTOR_3     ((uint32_t)0x0800C000) /* Base @ of Sector 3, 16 Kbytes */
-#define ADDR_FLASH_SECTOR_4     ((uint32_t)0x08010000) /* Base @ of Sector 4, 64 Kbytes */
-#define ADDR_FLASH_SECTOR_5     ((uint32_t)0x08020000) /* Base @ of Sector 5, 128 Kbytes */
-#define ADDR_FLASH_SECTOR_6     ((uint32_t)0x08040000) /* Base @ of Sector 6, 128 Kbytes */
-#define ADDR_FLASH_SECTOR_7     ((uint32_t)0x08060000) /* Base @ of Sector 7, 128 Kbytes */
-#define ADDR_FLASH_SECTOR_8     ((uint32_t)0x08080000) /* Base @ of Sector 8, 128 Kbytes */
-#define ADDR_FLASH_SECTOR_9     ((uint32_t)0x080A0000) /* Base @ of Sector 9, 128 Kbytes */
-#define ADDR_FLASH_SECTOR_10    ((uint32_t)0x080C0000) /* Base @ of Sector 10, 128 Kbytes */
-#define ADDR_FLASH_SECTOR_11    ((uint32_t)0x080E0000) /* Base @ of Sector 11, 128 Kbytes */
-
-/* Base address of the Flash sectors Bank 2 */
-#define ADDR_FLASH_SECTOR_12     ((uint32_t)0x08100000) /* Base @ of Sector 0, 16 Kbytes */
-#define ADDR_FLASH_SECTOR_13     ((uint32_t)0x08104000) /* Base @ of Sector 1, 16 Kbytes */
-#define ADDR_FLASH_SECTOR_14     ((uint32_t)0x08108000) /* Base @ of Sector 2, 16 Kbytes */
-#define ADDR_FLASH_SECTOR_15     ((uint32_t)0x0810C000) /* Base @ of Sector 3, 16 Kbytes */
-#define ADDR_FLASH_SECTOR_16     ((uint32_t)0x08110000) /* Base @ of Sector 4, 64 Kbytes */
-#define ADDR_FLASH_SECTOR_17     ((uint32_t)0x08120000) /* Base @ of Sector 5, 128 Kbytes */
-#define ADDR_FLASH_SECTOR_18     ((uint32_t)0x08140000) /* Base @ of Sector 6, 128 Kbytes */
-#define ADDR_FLASH_SECTOR_19     ((uint32_t)0x08160000) /* Base @ of Sector 7, 128 Kbytes */
-#define ADDR_FLASH_SECTOR_20     ((uint32_t)0x08180000) /* Base @ of Sector 8, 128 Kbytes  */
-#define ADDR_FLASH_SECTOR_21     ((uint32_t)0x081A0000) /* Base @ of Sector 9, 128 Kbytes  */
-#define ADDR_FLASH_SECTOR_22     ((uint32_t)0x081C0000) /* Base @ of Sector 10, 128 Kbytes */
-#define ADDR_FLASH_SECTOR_23     ((uint32_t)0x081E0000) /* Base @ of Sector 11, 128 Kbytes */
-
-#define FLASH_USER_START_ADDR   ADDR_FLASH_SECTOR_3   /* Start @ of user Flash area */
-#define FLASH_USER_END_ADDR     ADDR_FLASH_SECTOR_23  +  GetSectorSize(ADDR_FLASH_SECTOR_23) -1 /* End @ of user Flash area : sector start address + sector size -1 */
-
-#define DATA_32                 ((uint32_t)0x12345678)
-
-uint32_t FirstSector = 0, NbOfSectors = 0;
-uint32_t Address = 0, SECTORError = 0;
-__IO uint32_t data32 = 0 , MemoryProgramStatus = 0;
-
-static FLASH_EraseInitTypeDef EraseInitStruct;
-
-static uint32_t GetSector(uint32_t Address);
-static uint32_t GetSectorSize(uint32_t Sector);
+#define BUF_SIZE 30
+uint8_t usb_buf[BUF_SIZE];
+uint32_t count;
 /* USER CODE END 0 */
 
 /**
@@ -138,108 +96,9 @@ int main(void)
   MX_GPIO_Init();
   MX_USART3_UART_Init();
   MX_RTC_Init();
+  MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
-#if 0
-  memset(uart_buf,0,UART_BUF_LEN);
-  sprintf(uart_buf,"page 0\r\n");
-  HAL_UART_Transmit_IT(&huart3,uart_buf,sizeof(uart_buf));
-  HAL_Delay(10);
 
-  flash_addr = (uint32_t *)0x08000000;
-
-  for(i=0;i<10;i++)
-  {
-    memset(uart_buf,0,UART_BUF_LEN);
-    sprintf(uart_buf,"%08x => %08x\r\n", flash_addr, *(flash_addr));
-    HAL_UART_Transmit_IT(&huart3,uart_buf,sizeof(uart_buf));
-    HAL_Delay(10);
-    flash_addr++;
-  }
-
-  memset(uart_buf,0,UART_BUF_LEN);
-  sprintf(uart_buf,"\nbank2\r\n");
-  HAL_UART_Transmit_IT(&huart3,uart_buf,sizeof(uart_buf));
-  HAL_Delay(10);
-
-  flash_addr = (uint32_t *)0x08100000;
-
-  for(i=0;i<10;i++)
-  {
-    memset(uart_buf,0,UART_BUF_LEN);
-    sprintf(uart_buf,"%08x => %08x\r\n", flash_addr, *(flash_addr));
-    HAL_UART_Transmit_IT(&huart3,uart_buf,sizeof(uart_buf));
-    HAL_Delay(10);
-    flash_addr++;
-  }
-#endif
-#if 1
-  HAL_FLASH_Unlock();
-
-  /* Get the 1st sector to erase */
-  FirstSector = GetSector(FLASH_USER_START_ADDR);
-  /* Get the number of sector to erase from 1st sector*/
-  NbOfSectors = GetSector(FLASH_USER_END_ADDR) - FirstSector + 1;
-  /* Fill EraseInit structure*/
-  EraseInitStruct.TypeErase     = FLASH_TYPEERASE_SECTORS;
-  EraseInitStruct.VoltageRange  = FLASH_VOLTAGE_RANGE_3;
-  EraseInitStruct.Sector        = FirstSector;
-  EraseInitStruct.NbSectors     = NbOfSectors;
-
-  if(HAL_FLASHEx_Erase(&EraseInitStruct, &SECTORError) != HAL_OK)
-  {
-	memset(uart_buf,0,UART_BUF_LEN);
-	sprintf(uart_buf,"HAL_FLASHEx_Erase ERROR\r\n");
-	HAL_UART_Transmit_IT(&huart3,uart_buf,sizeof(uart_buf));
-	return -1;
-  }
-
-
-  Address = FLASH_USER_START_ADDR;
-
-  while(Address < FLASH_USER_END_ADDR)
-  {
-    if(HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, Address, DATA_32) == HAL_OK)
-    {
-      Address = Address + 4;
-    }
-   else
-    {
-		memset(uart_buf,0,UART_BUF_LEN);
-		sprintf(uart_buf,"HAL_FLASH_Program ERROR\r\n");
-		HAL_UART_Transmit_IT(&huart3,uart_buf,sizeof(uart_buf));
-		return -1;
-    }
-  }
-
-  HAL_FLASH_Lock();
-
-  Address = FLASH_USER_START_ADDR;
-  MemoryProgramStatus = 0x0;
-
-  while(Address < FLASH_USER_END_ADDR)
-  {
-    data32 = *(__IO uint32_t *)Address;
-
-    if (data32 != DATA_32)
-    {
-      MemoryProgramStatus++;
-    }
-    Address = Address + 4;
-  }
-
-  if(MemoryProgramStatus == 0)
-  {
-		memset(uart_buf,0,UART_BUF_LEN);
-		sprintf(uart_buf,"No error detected\r\n");
-		HAL_UART_Transmit_IT(&huart3,uart_buf,sizeof(uart_buf));
-  }
-  else
-  {
-		memset(uart_buf,0,UART_BUF_LEN);
-		sprintf(uart_buf,"Error detected\r\n");
-		HAL_UART_Transmit_IT(&huart3,uart_buf,sizeof(uart_buf));
-  }
-#endif
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -247,7 +106,11 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-
+    sprintf(usb_buf,"USB CDC Test %d\r\n",count);
+    CDC_Transmit_FS(usb_buf,BUF_SIZE);
+    HAL_Delay(1000);
+    memset(usb_buf,0,BUF_SIZE);
+    count++;
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -265,29 +128,21 @@ void SystemClock_Config(void)
   /** Configure the main internal regulator output voltage
   */
   __HAL_RCC_PWR_CLK_ENABLE();
-  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
+  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE3);
 
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_LSE;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE|RCC_OSCILLATORTYPE_LSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
   RCC_OscInitStruct.LSEState = RCC_LSE_ON;
-  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
-  RCC_OscInitStruct.PLL.PLLM = 8;
-  RCC_OscInitStruct.PLL.PLLN = 180;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+  RCC_OscInitStruct.PLL.PLLM = 4;
+  RCC_OscInitStruct.PLL.PLLN = 72;
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
-  RCC_OscInitStruct.PLL.PLLQ = 7;
+  RCC_OscInitStruct.PLL.PLLQ = 3;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
-  {
-    Error_Handler();
-  }
-
-  /** Activate the Over-Drive mode
-  */
-  if (HAL_PWREx_EnableOverDrive() != HAL_OK)
   {
     Error_Handler();
   }
@@ -301,67 +156,12 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_5) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
   {
     Error_Handler();
   }
 }
 
-static uint32_t GetSector(uint32_t Address)
-{
-  uint32_t sector = 0;
-
-  if((Address < ADDR_FLASH_SECTOR_1) && (Address >= ADDR_FLASH_SECTOR_0))
-  {
-    sector = FLASH_SECTOR_0;
-  }
-  else if((Address < ADDR_FLASH_SECTOR_2) && (Address >= ADDR_FLASH_SECTOR_1))
-  {
-    sector = FLASH_SECTOR_1;
-  }
-  else if((Address < ADDR_FLASH_SECTOR_3) && (Address >= ADDR_FLASH_SECTOR_2))
-  {
-    sector = FLASH_SECTOR_2;
-  }
-  else if((Address < ADDR_FLASH_SECTOR_4) && (Address >= ADDR_FLASH_SECTOR_3))
-  {
-    sector = FLASH_SECTOR_3;
-  }
-  else if((Address < ADDR_FLASH_SECTOR_5) && (Address >= ADDR_FLASH_SECTOR_4))
-  {
-    sector = FLASH_SECTOR_4;
-  }
-  else if((Address < ADDR_FLASH_SECTOR_6) && (Address >= ADDR_FLASH_SECTOR_5))
-  {
-    sector = FLASH_SECTOR_5;
-  }
-  else if((Address < ADDR_FLASH_SECTOR_7) && (Address >= ADDR_FLASH_SECTOR_6))
-  {
-    sector = FLASH_SECTOR_6;
-  }
-  else /* (Address < FLASH_END_ADDR) && (Address >= ADDR_FLASH_SECTOR_7) */
-  {
-    sector = FLASH_SECTOR_7;
-  }
-  return sector;
-}
-static uint32_t GetSectorSize(uint32_t Sector)
-{
-  uint32_t sectorsize = 0x00;
-  if((Sector == FLASH_SECTOR_0) || (Sector == FLASH_SECTOR_1) || (Sector == FLASH_SECTOR_2) || (Sector == FLASH_SECTOR_3))
-  {
-    sectorsize = 16 * 1024;
-  }
-  else if(Sector == FLASH_SECTOR_4)
-  {
-    sectorsize = 64 * 1024;
-  }
-  else
-  {
-    sectorsize = 128 * 1024;
-  }
-  return sectorsize;
-}
 /**
   * @brief RTC Initialization Function
   * @param None
@@ -506,20 +306,6 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(USB_OverCurrent_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : USB_SOF_Pin USB_ID_Pin USB_DM_Pin USB_DP_Pin */
-  GPIO_InitStruct.Pin = USB_SOF_Pin|USB_ID_Pin|USB_DM_Pin|USB_DP_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-  GPIO_InitStruct.Alternate = GPIO_AF10_OTG_FS;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : USB_VBUS_Pin */
-  GPIO_InitStruct.Pin = USB_VBUS_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(USB_VBUS_GPIO_Port, &GPIO_InitStruct);
-
   /*Configure GPIO pins : RMII_TX_EN_Pin RMII_TXD0_Pin */
   GPIO_InitStruct.Pin = RMII_TX_EN_Pin|RMII_TXD0_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
@@ -527,14 +313,6 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
   GPIO_InitStruct.Alternate = GPIO_AF11_ETH;
   HAL_GPIO_Init(GPIOG, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : PB8 */
-  GPIO_InitStruct.Pin = GPIO_PIN_8;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_OD;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-  GPIO_InitStruct.Alternate = GPIO_AF4_I2C1;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
